@@ -8,10 +8,13 @@ import { Telegraf } from 'telegraf'
 // Custom imports
 import config from './config.js';
 
-// Check if the token is defined
-const token = config.token;
-if (!token) {
+// Check if config variables are defined
+if (!config.token) {
   throw new Error('TELEGRAM_BOT_TOKEN is not defined.');
+}
+
+if (!config.id) {
+  throw new Error('TELEGRAM_CHAT_ID is not defined.');
 }
 
 // Define __dirname
@@ -19,7 +22,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Create a bot using the token
-const bot = new Telegraf(token);
+const bot = new Telegraf(config.token);
 
 /**
  * Downloads a file from the given URL and saves it to the specified file path.
@@ -48,6 +51,12 @@ async function downloadFile(url, filePath) {
 
 // Listen for messages
 bot.on('message', async (ctx) => {
+  console.log(ctx.message.from.id, config.id);
+  if (ctx.message.from.id !== config.id) {
+    console.error(`Unauthorized user ${ctx.message.from.id} tried to send a message`);
+    return;
+  }
+
   if (ctx.message.document) {
     // console.log('document:', ctx.message.document);
 
