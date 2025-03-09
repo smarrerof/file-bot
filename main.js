@@ -2,7 +2,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 
-import { fileURLToPath } from 'url';
+
 import { Telegraf } from 'telegraf'
 
 // Custom imports
@@ -16,10 +16,6 @@ if (!config.token) {
 if (!config.id) {
   throw new Error('TELEGRAM_CHAT_ID is not defined.');
 }
-
-// Define __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Create a bot using the token
 const bot = new Telegraf(config.token);
@@ -65,7 +61,7 @@ bot.on('message', async (ctx) => {
     const fileId = document.file_id;
     console.log('fileId:', fileId);
 
-    const filePath = path.resolve(__dirname, 'downloads', document.file_name);
+    const filePath = path.resolve(config.defaultPath, document.file_name);
     console.log('filePath:', filePath);
 
     const url = await ctx.telegram.getFileLink(fileId);
@@ -83,7 +79,7 @@ bot.on('message', async (ctx) => {
     const fileId = photo.file_id;
     console.log('fileId:', fileId);
 
-    const filePath = path.resolve(__dirname, 'downloads', `${photo.file_id}.jpeg`);
+    const filePath = path.resolve(config.defaultPath, `${photo.file_id}.jpeg`);
     console.log('filePath:', filePath);
 
     const url = await ctx.telegram.getFileLink(fileId);
