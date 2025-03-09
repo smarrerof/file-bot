@@ -1,0 +1,9 @@
+services:
+  dropbot:
+    container_name: file-bot-test
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: ./Dockerfile.dev
+    tty: true

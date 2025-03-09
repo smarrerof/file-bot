@@ -1,0 +1,12 @@
+FROM node:alpine3.21
+
+WORKDIR /app
+
+COPY *.js ./
+COPY package.json ./
+
+RUN npm install
+
+VOLUME /downloads
+
+CMD ["npm", "start"]
