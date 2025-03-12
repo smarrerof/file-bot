@@ -47,51 +47,46 @@ async function downloadFile(url, filePath) {
 
 // Listen for messages
 bot.on('message', async (ctx) => {
-  console.log(ctx.message.from.id, config.id);
   if (ctx.message.from.id !== config.id) {
     console.error(`Unauthorized user ${ctx.message.from.id} tried to send a message`);
     return;
   }
 
   if (ctx.message.document) {
-    // console.log('document:', ctx.message.document);
-
     const document = ctx.message.document;
 
     const fileId = document.file_id;
-    console.log('fileId:', fileId);
-
     const filePath = path.resolve(config.defaultPath, document.file_name);
-    console.log('filePath:', filePath);
-
     const url = await ctx.telegram.getFileLink(fileId);
-    console.log('url:', url);
 
     downloadFile(url.href, filePath)
-      .then(() => console.log('Document downloaded successfully'))
-      .catch(err => console.error('Error downloading document:', err));
+      .then(() => {
+        const message = `🟢 ${document.file_name} downloaded successfully`;
+        ctx.reply(message);
+        console.log(message);
+      })
+      .catch(err => {
+        const message = `🔴 Error downloading the document ${document.file_name}`;
+        ctx.reply(message);
+        console.error(message);
+        console.error(err);
+      });
   } else if (ctx.message.photo) {
-    // console.log('photo:', ctx.message.photo);
-
     const photo = ctx.message.photo.pop();
-    console.log('photo:', photo);
 
     const fileId = photo.file_id;
-    console.log('fileId:', fileId);
-
     const filePath = path.resolve(config.defaultPath, `${photo.file_id}.jpeg`);
-    console.log('filePath:', filePath);
-
     const url = await ctx.telegram.getFileLink(fileId);
-    console.log('url:', url);
 
     downloadFile(url.href, filePath)
-      .then(() => console.log('Document downloaded successfully'))
-      .catch(err => console.error('Error downloading document:', err));
+      .then(() => console.log('Photo downloaded successfully'))
+      .catch(err => console.error('Error downloading photo:', err));
   } else if (ctx.message.text) {
-    console.log('text:', ctx.message.text)
+    // console.log('text:', ctx.message.text)
   } else {    
-    console.log('Message is unknown at the moment: ', ctx);
+    const message = `🟠 Message is unknown at the moment`;
+    ctx.reply(message);
+    console.warning(message);
   }
 });
 
