@@ -82,7 +82,27 @@ bot.on('message', async (ctx) => {
       .then(() => console.log('Photo downloaded successfully'))
       .catch(err => console.error('Error downloading photo:', err));
   } else if (ctx.message.text) {
-    // console.log('text:', ctx.message.text)
+    // Detect if the message is an URL
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    if (urlRegex.test(ctx.message.text)) {
+      // Download the file from the URL
+      const url = ctx.message.text;
+      const fileName = url.split('/').pop();
+      const filePath = path.resolve(config.defaultPath, fileName);
+
+      downloadFile(url, filePath)
+        .then(() => {
+          const message = `🟢 ${fileName} downloaded successfully`;
+          ctx.reply(message);
+          console.log(message);
+        })
+        .catch(err => {
+          const message = `🔴 Error downloading from ${url}`;
+          ctx.reply(message);
+          console.error(message);
+          console.error(err);
+        });
+    }
   } else {    
     const message = `🟠 Message is unknown at the moment`;
     ctx.reply(message);
