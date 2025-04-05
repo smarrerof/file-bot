@@ -129,7 +129,7 @@ function getMessageType(message) {
 
 // Listen for text messages
 bot.on(message('text'), async (ctx) => {
-  log.info('Received a message', ctx.message);
+  // log.info('Received a message', ctx.message);
 
   // Check if the message is from the authorized user
   if (ctx.message.from.id !== config.id) {
@@ -139,16 +139,13 @@ bot.on(message('text'), async (ctx) => {
 
   const type = getMessageType(ctx.message);
   if (!type) return;
-  log.info(`Message type is ${type}`);
 
   const text = ctx.message.text;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   if (urlRegex.test(text)) {
     // Download the file from the URL
     const fileName = text.split('/').pop();
-    log.info(`File name is ${fileName}`);
     const filePath = getFilePath(fileName, type);
-    log.info(`File path is ${filePath}`);
 
     downloadFile(text, filePath)
   }
@@ -156,7 +153,7 @@ bot.on(message('text'), async (ctx) => {
 
 // Listen for document | photo messages
 bot.on(message, async (ctx) => {
-  log.info('Received a message', ctx.message);
+  // log.info('Received a message', ctx.message);
 
   // Check if the message is from the authorized user
   if (ctx.message.from.id !== config.id) {
@@ -166,7 +163,6 @@ bot.on(message, async (ctx) => {
 
   const type = getMessageType(ctx.message);
   if (!type) return;
-  log.info(`Message type is ${type}`);
 
   const fileId = getFileId(ctx.message);
   const fileUrl = await ctx.telegram.getFileLink(fileId);
