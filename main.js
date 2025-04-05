@@ -2,11 +2,12 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 
-
 import { Telegraf } from 'telegraf'
+import { message } from 'telegraf/filters'
 
 // Custom imports
 import config from './config.js';
+import log from './log.js';
 
 // Check if config variables are defined
 if (!config.token) {
@@ -19,6 +20,7 @@ if (!config.id) {
 
 // Create a bot using the token
 const bot = new Telegraf(config.token);
+
 
 /**
  * Downloads a file from the given URL and saves it to the specified file path.
@@ -39,76 +41,141 @@ async function downloadFile(url, filePath) {
 
   response.data.pipe(writer);
 
+  const fileName = path.basename(filePath);
   return new Promise((resolve, reject) => {
-    writer.on('finish', resolve);
-    writer.on('error', reject);
+    writer.on('finish', () => {
+      const message = `${fileName} downloaded successfully`;
+      bot.telegram.sendMessage(config.id, `🟢 ${message}`)
+      log.success(message);
+
+      resolve();
+    });
+    writer.on('error', () => {
+      const message = `Error downloading ${fileName}`;
+      bot.telegram.sendMessage(`🔴 ${message}`);
+      log.error(message);
+      log.error(err);
+
+      reject();
+    });
   });
 }
 
-// Listen for messages
-bot.on('message', async (ctx) => {
+function getFileId(message) {
+  if (message.document) {
+    const document = message.document;
+    return document.file_id;
+  } else if (message.photo) {
+    const photo = message.photo.pop();
+    return photo.file_id;
+  }
+}
+
+function getFileName(message) {
+  const photoExtensions = ['.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.tiff', '.webp'];
+
+  if (message.document) {
+    const document = message.document;
+    const fileName = document.file_name;
+    
+    return fileName;
+  } else if (message.photo) {
+    const photo = message.photo.pop();
+    const fileName = `${photo.file_unique_id}.jpeg`
+    
+    return fileName;
+  }
+}
+
+function getFilePath(fileName, type) {
+  const documentExtensions = ['.doc', '.docx', '.pdf', '.ppt', '.pptx', '.txt', '.xls', '.xlsx'];
+  const photoExtensions = ['.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.tiff', '.webp'];
+  const torrentExtensions = ['.torrent'];
+
+  if (type === 'document' || type === 'text') {
+    const fileExtension = path.extname(fileName);
+
+    let filePath = config.defaultPath;
+    if (documentExtensions.includes(fileExtension)) {
+      filePath = config.documentPath;
+    } else if (photoExtensions.includes(fileExtension)) {
+      filePath = config.photoPath;
+    } else if (torrentExtensions.includes(fileExtension)) {
+      filePath = config.torrentPath;
+    }
+
+    return path.resolve(filePath, fileName);
+  } else if (type === 'photo') {
+    const filePath = config.photoPath;
+
+    return path.resolve(filePath, fileName);
+  }
+}
+
+function getMessageType(message) {
+  if (message.document) {
+    return 'document';
+  } else if (message.photo) {
+    return 'photo';
+  } else if (message.text) {
+    return 'text';
+  } else {
+    const message = `Message type is unknown`;
+    bot.telegram.sendMessage(`🔴 ${message}`);
+    log.error(message);
+    return null;
+  }
+}
+
+// Listen for text messages
+bot.on(message('text'), async (ctx) => {
+  log.info('Received a message', ctx.message);
+
+  // Check if the message is from the authorized user
   if (ctx.message.from.id !== config.id) {
-    console.error(`Unauthorized user ${ctx.message.from.id} tried to send a message`);
+    log.error(`Unauthorized user ${ctx.message.from.id} tried to send a message`);
     return;
   }
 
-  if (ctx.message.document) {
-    const document = ctx.message.document;
+  const type = getMessageType(ctx.message);
+  if (!type) return;
+  log.info(`Message type is ${type}`);
 
-    const fileId = document.file_id;
-    const filePath = path.resolve(config.defaultPath, document.file_name);
-    const url = await ctx.telegram.getFileLink(fileId);
+  const text = ctx.message.text;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  if (urlRegex.test(text)) {
+    // Download the file from the URL
+    const fileName = text.split('/').pop();
+    log.info(`File name is ${fileName}`);
+    const filePath = getFilePath(fileName, type);
+    log.info(`File path is ${filePath}`);
 
-    downloadFile(url.href, filePath)
-      .then(() => {
-        const message = `🟢 ${document.file_name} downloaded successfully`;
-        ctx.reply(message);
-        console.log(message);
-      })
-      .catch(err => {
-        const message = `🔴 Error downloading the document ${document.file_name}`;
-        ctx.reply(message);
-        console.error(message);
-        console.error(err);
-      });
-  } else if (ctx.message.photo) {
-    const photo = ctx.message.photo.pop();
-
-    const fileId = photo.file_id;
-    const filePath = path.resolve(config.defaultPath, `${photo.file_id}.jpeg`);
-    const url = await ctx.telegram.getFileLink(fileId);
-
-    downloadFile(url.href, filePath)
-      .then(() => console.log('Photo downloaded successfully'))
-      .catch(err => console.error('Error downloading photo:', err));
-  } else if (ctx.message.text) {
-    // Detect if the message is an URL
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    if (urlRegex.test(ctx.message.text)) {
-      // Download the file from the URL
-      const url = ctx.message.text;
-      const fileName = url.split('/').pop();
-      const filePath = path.resolve(config.defaultPath, fileName);
-
-      downloadFile(url, filePath)
-        .then(() => {
-          const message = `🟢 ${fileName} downloaded successfully`;
-          ctx.reply(message);
-          console.log(message);
-        })
-        .catch(err => {
-          const message = `🔴 Error downloading from ${url}`;
-          ctx.reply(message);
-          console.error(message);
-          console.error(err);
-        });
-    }
-  } else {    
-    const message = `🟠 Message is unknown at the moment`;
-    ctx.reply(message);
-    console.warning(message);
+    downloadFile(text, filePath)
   }
 });
+
+// Listen for document | photo messages
+bot.on(message, async (ctx) => {
+  log.info('Received a message', ctx.message);
+
+  // Check if the message is from the authorized user
+  if (ctx.message.from.id !== config.id) {
+    log.error(`Unauthorized user ${ctx.message.from.id} tried to send a message`);
+    return;
+  }
+
+  const type = getMessageType(ctx.message);
+  if (!type) return;
+  log.info(`Message type is ${type}`);
+
+  const fileId = getFileId(ctx.message);
+  const fileUrl = await ctx.telegram.getFileLink(fileId);
+  const fileName = getFileName(ctx.message);
+  const filePath = getFilePath(fileName, type);
+
+  downloadFile(fileUrl.href, filePath);
+});
+
 
 // Start the bot
 bot.launch();

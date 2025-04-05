@@ -6,3 +6,6 @@ node_modules/
 
 # Other files
 .DS_Store
+
+# Other folders
+samples/
