@@ -23,14 +23,15 @@ const bot = new Telegraf(config.token);
 
 
 /**
- * Downloads a file from the given URL and saves it to the specified file path.
+ * Downloads a file from the specified URL and saves it to the given file path.
  *
+ * @param {Object} ctx - The context object, used for replying and logging.
  * @param {string} url - The URL of the file to download.
  * @param {string} filePath - The local file path where the downloaded file will be saved.
- * @returns {Promise<void>} A promise that resolves when the file has been successfully downloaded and saved.
- * @throws {Error} If there is an error during the download or file writing process.
+ * @param {Object} config - Configuration object containing additional settings (e.g., `id` for context reply).
+ * @returns {Promise<void>} A promise that resolves when the file is successfully downloaded, or rejects on error.
  */
-async function downloadFile(url, filePath) {
+async function downloadFile(ctx, url, filePath) {
   const writer = fs.createWriteStream(filePath);
 
   const response = await axios({
@@ -45,14 +46,14 @@ async function downloadFile(url, filePath) {
   return new Promise((resolve, reject) => {
     writer.on('finish', () => {
       const message = `${fileName} downloaded successfully`;
-      bot.telegram.sendMessage(config.id, `🟢 ${message}`)
+      ctx.reply(`🟢 ${message}`)
       log.success(message);
 
       resolve();
     });
     writer.on('error', () => {
       const message = `Error downloading ${fileName}`;
-      bot.telegram.sendMessage(`🔴 ${message}`);
+      ctx.reply(`🔴 ${message}`);
       log.error(message);
       log.error(err);
 
@@ -61,8 +62,17 @@ async function downloadFile(url, filePath) {
   });
 }
 
+/**
+ * Extracts the file ID from a message object.
+ * 
+ * @param {Object} message - The message object containing file information.
+ * @returns {string|undefined} The file ID of the document or the last photo in the array, or undefined if neither is present.
+ */
 function getFileId(message) {
-  if (message.document) {
+  if (message.audio) {
+    const audio = message.audio;
+    return audio.file_id;
+  } else if (message.document) {
     const document = message.document;
     return document.file_id;
   } else if (message.photo) {
@@ -71,10 +81,19 @@ function getFileId(message) {
   }
 }
 
+/**
+ * Extracts the file name from a given message object based on its type.
+ *
+ * @param {Object} message - The message object containing file information.
+ * @returns {string|undefined} The extracted file name, or `undefined` if no valid file type is found.
+ */
 function getFileName(message) {
-  const photoExtensions = ['.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.tiff', '.webp'];
-
-  if (message.document) {
+  if (message.audio) {
+    const audio = message.audio;
+    const fileName = audio.file_name;
+    
+    return fileName;
+  } else if (message.document) {
     const document = message.document;
     const fileName = document.file_name;
     
@@ -87,15 +106,27 @@ function getFileName(message) {
   }
 }
 
+/**
+ * Retrieves the file path for a given file name and type based on its extension.
+ *
+ * @param {string} fileName - The name of the file, including its extension.
+ * @param {string} type - The type of the file, such as 'document', 'text', or 'photo'.
+ * @returns {string} The resolved file path for the specified file name and type.
+ */
 function getFilePath(fileName, type) {
+  const audioExtensions = ['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.wma'];
   const documentExtensions = ['.doc', '.docx', '.pdf', '.ppt', '.pptx', '.txt', '.xls', '.xlsx'];
   const photoExtensions = ['.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.tiff', '.webp'];
   const torrentExtensions = ['.torrent'];
 
-  if (type === 'document' || type === 'text') {
+  let filePath = config.defaultPath;
+  if (type === 'audio') {
     const fileExtension = path.extname(fileName);
-
-    let filePath = config.defaultPath;
+    if (!audioExtensions.includes(fileExtension)) {
+      filePath = config.audioPath;
+    }
+  } else if (type === 'document' || type === 'text') {
+    const fileExtension = path.extname(fileName);
     if (documentExtensions.includes(fileExtension)) {
       filePath = config.documentPath;
     } else if (photoExtensions.includes(fileExtension)) {
@@ -103,17 +134,23 @@ function getFilePath(fileName, type) {
     } else if (torrentExtensions.includes(fileExtension)) {
       filePath = config.torrentPath;
     }
-
-    return path.resolve(filePath, fileName);
   } else if (type === 'photo') {
     const filePath = config.photoPath;
-
-    return path.resolve(filePath, fileName);
   }
+  return path.resolve(filePath, fileName);
 }
 
-function getMessageType(message) {
-  if (message.document) {
+/**
+ * Determines the type of a message from the given context object.
+ *
+ * @param {Object} ctx - The context object containing the message.
+ * @returns {string|null} The type of the message ('audio', 'document', 'photo', 'text'), or `null` if the type is unknown.
+ */
+function getMessageType(ctx) {
+  const message = ctx.message;
+  if (message.audio) {
+    return 'audio';
+  } else if (message.document) {
     return 'document';
   } else if (message.photo) {
     return 'photo';
@@ -121,7 +158,7 @@ function getMessageType(message) {
     return 'text';
   } else {
     const message = `Message type is unknown`;
-    bot.telegram.sendMessage(`🔴 ${message}`);
+    ctx.reply(`🔴 ${message}`);
     log.error(message);
     return null;
   }
@@ -129,7 +166,7 @@ function getMessageType(message) {
 
 // Listen for text messages
 bot.on(message('text'), async (ctx) => {
-  // log.info('Received a message', ctx.message);
+  // log.info('Received a text message', ctx.message);
 
   // Check if the message is from the authorized user
   if (ctx.message.from.id !== config.id) {
@@ -137,7 +174,7 @@ bot.on(message('text'), async (ctx) => {
     return;
   }
 
-  const type = getMessageType(ctx.message);
+  const type = getMessageType(ctx);
   if (!type) return;
 
   const text = ctx.message.text;
@@ -147,11 +184,11 @@ bot.on(message('text'), async (ctx) => {
     const fileName = text.split('/').pop();
     const filePath = getFilePath(fileName, type);
 
-    downloadFile(text, filePath)
+    downloadFile(ctx, text, filePath)
   }
 });
 
-// Listen for document | photo messages
+// Listen for audio | document | photo messages
 bot.on(message, async (ctx) => {
   // log.info('Received a message', ctx.message);
 
@@ -161,7 +198,7 @@ bot.on(message, async (ctx) => {
     return;
   }
 
-  const type = getMessageType(ctx.message);
+  const type = getMessageType(ctx);
   if (!type) return;
 
   const fileId = getFileId(ctx.message);
@@ -169,7 +206,7 @@ bot.on(message, async (ctx) => {
   const fileName = getFileName(ctx.message);
   const filePath = getFilePath(fileName, type);
 
-  downloadFile(fileUrl.href, filePath);
+  downloadFile(ctx, fileUrl.href, filePath);
 });
 
 
