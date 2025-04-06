@@ -6,4 +6,9 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile.dev
+    volumes:
+      - <tu ruta para descargas>:/downloads
+      # - <tu ruta para descargas de tipo documento>:/documents
+      # - <tu ruta para descargas de tipo fotos>:/photos
+      # - <tu ruta para descargas de tipo torrent>:/torrents
     tty: true
