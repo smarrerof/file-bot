@@ -78,6 +78,9 @@ function getFileId(message) {
   } else if (message.photo) {
     const photo = message.photo.pop();
     return photo.file_id;
+  } else if (message.video) {
+    const video = message.video;
+    return video.file_id;
   }
 }
 
@@ -103,6 +106,11 @@ function getFileName(message) {
     const fileName = `${photo.file_unique_id}.jpeg`
     
     return fileName;
+  } else if (message.video) {
+    const video = message.video;
+    const fileName = video.file_name;
+    
+    return fileName;
   }
 }
 
@@ -110,7 +118,7 @@ function getFileName(message) {
  * Retrieves the file path for a given file name and type based on its extension.
  *
  * @param {string} fileName - The name of the file, including its extension.
- * @param {string} type - The type of the file, such as 'document', 'text', or 'photo'.
+ * @param {string} type - The type of the file, such as 'audio', 'document', 'text', 'photo' or 'video'.
  * @returns {string} The resolved file path for the specified file name and type.
  */
 function getFilePath(fileName, type) {
@@ -118,6 +126,7 @@ function getFilePath(fileName, type) {
   const documentExtensions = ['.doc', '.docx', '.pdf', '.ppt', '.pptx', '.txt', '.xls', '.xlsx'];
   const photoExtensions = ['.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.tiff', '.webp'];
   const torrentExtensions = ['.torrent'];
+  const videoExtensions = ['.avi', '.flv', '.mkv', '.mov', '.mp4', '.mpeg', '.mpg', '.wmv'];
 
   let filePath = config.defaultPath;
   if (type === 'audio') {
@@ -125,7 +134,7 @@ function getFilePath(fileName, type) {
     if (!audioExtensions.includes(fileExtension)) {
       filePath = config.audioPath;
     }
-  } else if (type === 'document' || type === 'text') {
+  } else if (type === 'document' || type === 'text') {    
     const fileExtension = path.extname(fileName);
     if (documentExtensions.includes(fileExtension)) {
       filePath = config.documentPath;
@@ -133,9 +142,13 @@ function getFilePath(fileName, type) {
       filePath = config.photoPath;
     } else if (torrentExtensions.includes(fileExtension)) {
       filePath = config.torrentPath;
+    } else if (videoExtensions.includes(fileExtension)) {
+      filePath = config.videoPath;
     }
   } else if (type === 'photo') {
-    const filePath = config.photoPath;
+    filePath = config.photoPath;
+  } else if (type === 'video') {
+    filePath = config.videoPath;
   }
   return path.resolve(filePath, fileName);
 }
@@ -144,7 +157,7 @@ function getFilePath(fileName, type) {
  * Determines the type of a message from the given context object.
  *
  * @param {Object} ctx - The context object containing the message.
- * @returns {string|null} The type of the message ('audio', 'document', 'photo', 'text'), or `null` if the type is unknown.
+ * @returns {string|null} The type of the message ('audio', 'document', 'photo', 'text', 'video'), or `null` if the type is unknown.
  */
 function getMessageType(ctx) {
   const message = ctx.message;
@@ -156,6 +169,8 @@ function getMessageType(ctx) {
     return 'photo';
   } else if (message.text) {
     return 'text';
+  } else if (message.video) {
+    return 'video';
   } else {
     const message = `Message type is unknown`;
     ctx.reply(`🔴 ${message}`);
@@ -188,7 +203,7 @@ bot.on(message('text'), async (ctx) => {
   }
 });
 
-// Listen for audio | document | photo messages
+// Listen for audio | document | photo | video messages
 bot.on(message, async (ctx) => {
   // log.info('Received a message', ctx.message);
 
