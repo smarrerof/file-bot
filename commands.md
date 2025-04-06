@@ -2,8 +2,10 @@
 
 ## Doker
 
-### Build Docker images and push all of them to docker hub
+### Build Docker image and push it to docker hub
 > $ VERSION=0.1.0 npm run build
+
+> $ VERSION=latest npm run build
 
 ## Git
 
