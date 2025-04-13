@@ -8,7 +8,9 @@ services:
       dockerfile: ./Dockerfile.dev
     volumes:
       - <tu ruta para descargas>:/downloads
+      # - <tu ruta para descargas de tipo audio>:/audios
       # - <tu ruta para descargas de tipo documento>:/documents
       # - <tu ruta para descargas de tipo fotos>:/photos
       # - <tu ruta para descargas de tipo torrent>:/torrents
+      # - <tu ruta para descargas de tipo video>:/videos
     tty: true
