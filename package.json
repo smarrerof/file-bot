@@ -3,7 +3,7 @@
   "version": "0.1",
   "main": "main.js",
   "scripts": {    
-    "build" : "docker buildx build --push -t smarrerof/file-bot:$VERSION --platform linux/amd64,linux/arm64/v8 .",
+    "build" : "docker buildx build --no-cache --push -t smarrerof/file-bot:$VERSION --platform linux/amd64,linux/arm64/v8 .",
     "start": "node main.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
