@@ -45,7 +45,7 @@ services:
     tty: true
 ```
 
-## Uso con doker-compose desde docker hub
+## Uso con docker-compose desde docker hub
 ```
 services:
   dropbot:
