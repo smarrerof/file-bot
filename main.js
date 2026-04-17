@@ -2,7 +2,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 
-import { Telegraf } from 'telegraf'
+import { Telegraf, Markup } from 'telegraf'
 import { message } from 'telegraf/filters'
 
 // Custom imports
@@ -21,6 +21,10 @@ if (!config.id) {
 // Create a bot using the token
 const bot = new Telegraf(config.token);
 
+// Map to store pending download requests waiting for destination selection
+// Key format: "chatId:messageId"
+// Value format: { url, fileName, destinations }
+const pendingDownloads = new Map();
 
 /**
  * Downloads a file from the specified URL and saves it to the given file path.
@@ -28,11 +32,11 @@ const bot = new Telegraf(config.token);
  * @param {Object} ctx - The context object, used for replying and logging.
  * @param {string} url - The URL of the file to download.
  * @param {string} filePath - The local file path where the downloaded file will be saved.
- * @param {Object} config - Configuration object containing additional settings (e.g., `id` for context reply).
  * @returns {Promise<void>} A promise that resolves when the file is successfully downloaded, or rejects on error.
  */
 async function downloadFile(ctx, url, filePath) {
   const writer = fs.createWriteStream(filePath);
+  const fileName = path.basename(filePath);
 
   const response = await axios({
     url,
@@ -42,20 +46,18 @@ async function downloadFile(ctx, url, filePath) {
 
   response.data.pipe(writer);
 
-  const fileName = path.basename(filePath);
   return new Promise((resolve, reject) => {
     writer.on('finish', () => {
-      const message = `${fileName} downloaded successfully`;
-      ctx.reply(`🟢 ${message}`)
+      const message = `${fileName} downloaded to ${filePath}`;
+      ctx.reply(`🟢 ${fileName} downloaded successfully`)
       log.success(message);
 
       resolve();
     });
-    writer.on('error', () => {
+    writer.on('error', (err) => {
       const message = `Error downloading ${fileName}`;
       ctx.reply(`🔴 ${message}`);
-      log.error(message);
-      log.error(err);
+      log.error(message, err);
 
       reject();
     });
@@ -64,7 +66,7 @@ async function downloadFile(ctx, url, filePath) {
 
 /**
  * Extracts the file ID from a message object.
- * 
+ *
  * @param {Object} message - The message object containing file information.
  * @returns {string|undefined} The file ID of the document or the last photo in the array, or undefined if neither is present.
  */
@@ -94,63 +96,75 @@ function getFileName(message) {
   if (message.audio) {
     const audio = message.audio;
     const fileName = audio.file_name;
-    
+
     return fileName;
   } else if (message.document) {
     const document = message.document;
     const fileName = document.file_name;
-    
+
     return fileName;
   } else if (message.photo) {
     const photo = message.photo.pop();
     const fileName = `${photo.file_unique_id}.jpeg`
-    
+
     return fileName;
   } else if (message.video) {
     const video = message.video;
     const fileName = video.file_name;
-    
+
     return fileName;
   }
 }
 
 /**
- * Retrieves the file path for a given file name and type based on its extension.
+ * Retrieves the destination(s) for a given file name and type based on its extension.
+ * Returns an array of { label, path } objects. Extensions are matched against the
+ * configured extensions lists.
  *
  * @param {string} fileName - The name of the file, including its extension.
  * @param {string} type - The type of the file, such as 'audio', 'document', 'text', 'photo' or 'video'.
- * @returns {string} The resolved file path for the specified file name and type.
+ * @returns {Array<{label: string, path: string}>} Array of available destinations for this file.
  */
-function getFilePath(fileName, type) {
-  const audioExtensions = ['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.wma'];
-  const documentExtensions = ['.doc', '.docx', '.pdf', '.ppt', '.pptx', '.txt', '.xls', '.xlsx'];
-  const photoExtensions = ['.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.tiff', '.webp'];
-  const torrentExtensions = ['.torrent'];
-  const videoExtensions = ['.avi', '.flv', '.mkv', '.mov', '.mp4', '.mpeg', '.mpg', '.wmv'];
+function getDestinations(fileName, type) {
+  const ext = path.extname(fileName).toLowerCase();
+  const { extensions, destinations, defaultPath } = config;
 
-  let filePath = config.defaultPath;
+  // Type-specific routing
   if (type === 'audio') {
-    const fileExtension = path.extname(fileName);
-    if (!audioExtensions.includes(fileExtension)) {
-      filePath = config.audioPath;
-    }
-  } else if (type === 'document' || type === 'text') {    
-    const fileExtension = path.extname(fileName);
-    if (documentExtensions.includes(fileExtension)) {
-      filePath = config.documentPath;
-    } else if (photoExtensions.includes(fileExtension)) {
-      filePath = config.photoPath;
-    } else if (torrentExtensions.includes(fileExtension)) {
-      filePath = config.torrentPath;
-    } else if (videoExtensions.includes(fileExtension)) {
-      filePath = config.videoPath;
-    }
-  } else if (type === 'photo') {
-    filePath = config.photoPath;
-  } else if (type === 'video') {
-    filePath = config.videoPath;
+    return destinations.audio;
   }
-  return path.resolve(filePath, fileName);
+
+  if (type === 'photo') {
+    return destinations.photo;
+  }
+
+  if (type === 'video') {
+    return destinations.video;
+  }
+
+  // Document/Text: check extension to determine actual type
+  if (type === 'document' || type === 'text') {
+    if (extensions.audio.includes(ext))    return destinations.audio;
+    if (extensions.document.includes(ext)) return destinations.document;
+    if (extensions.photo.includes(ext))    return destinations.photo;
+    if (extensions.torrent.includes(ext))  return destinations.torrent;
+    if (extensions.video.includes(ext))    return destinations.video;
+  }
+
+  // Fallback to default destination
+  return [{ label: 'Default', path: defaultPath }];
+}
+
+/**
+ * Check if a message has downloadable content (audio, document, photo, text, or video).
+ * Filters out Telegram service messages (e.g., "auto-delete enabled" notifications).
+ *
+ * @param {Object} message - The message object.
+ * @returns {boolean} True if message has downloadable content.
+ */
+function isMessageDownloadable(message) {
+  if (!message) return false;
+  return !!(message.audio || message.document || message.photo || message.text || message.video);
 }
 
 /**
@@ -172,17 +186,111 @@ function getMessageType(ctx) {
   } else if (message.video) {
     return 'video';
   } else {
-    const message = `Message type is unknown`;
-    ctx.reply(`🔴 ${message}`);
-    log.error(message);
+    const errorMsg = `Message type is unknown`;
+    ctx.reply(`🔴 ${errorMsg}`);
+    log.error(errorMsg);
     return null;
   }
 }
 
+/**
+ * Handles file download logic with optional destination selection.
+ * If multiple destinations are configured for the file type, sends an inline keyboard
+ * for the user to choose. Otherwise, downloads immediately.
+ *
+ * @param {Object} ctx - The Telegraf context object
+ * @param {string} url - The download URL
+ * @param {string} fileName - The file name
+ * @param {string} type - The detected file type
+ */
+async function handleFileMessage(ctx, url, fileName, type) {
+  // Guard: ensure ctx and ctx.message exist
+  if (!ctx || !ctx.message) {
+    log.error('Invalid context: ctx or ctx.message is undefined');
+    return;
+  }
+
+  const destinations = getDestinations(fileName, type);
+  log.info(`${fileName} detected as ${type}`);
+
+  // Single destination: download immediately
+  if (destinations.length === 1) {
+    const filePath = path.resolve(destinations[0].path, fileName);
+    return downloadFile(ctx, url, filePath);
+  }
+
+  // Multiple destinations: ask user which one to use
+  try {
+    const key = `${ctx.chat.id}:${ctx.message.message_id}`;
+    pendingDownloads.set(key, { url, fileName, destinations });
+
+    const buttons = destinations.map((dest, i) =>
+      Markup.button.callback(dest.label, `dest:${key}:${i}`)
+    );
+
+    await ctx.reply(`Where should I save ${fileName}?`, Markup.inlineKeyboard(buttons));
+  } catch (err) {
+    log.error(`Error in handleFileMessage:`, err);
+    try {
+      await ctx.reply(`🔴 Error selecting destination`);
+    } catch (replyErr) {
+      log.error(`Failed to send error message:`, replyErr);
+    }
+  }
+}
+
+// Handle inline keyboard button presses (destination selection)
+bot.on('callback_query', async (ctx) => {
+  try {
+    const data = ctx.callbackQuery?.data;
+
+    if (!data || !data.startsWith('dest:')) {
+      return await ctx.answerCbQuery();
+    }
+
+    // Parse callback data: "dest:chatId:messageId:destinationIndex"
+    const parts = data.split(':');
+    if (parts.length !== 4) {
+      log.error(`Invalid callback format: ${data}`);
+      return await ctx.answerCbQuery('Invalid request format.');
+    }
+
+    const key = `${parts[1]}:${parts[2]}`;
+    const index = parseInt(parts[3], 10);
+
+    const pending = pendingDownloads.get(key);
+
+    if (!pending) {
+      return await ctx.answerCbQuery('This download request has expired.');
+    }
+
+    const dest = pending.destinations[index];
+
+    if (!dest) {
+      log.error(`Invalid destination index: ${index}`);
+      return await ctx.answerCbQuery('Invalid destination.');
+    }
+
+    // Remove from pending and proceed with download
+    pendingDownloads.delete(key);
+    await ctx.answerCbQuery(`Saving to ${dest.label}...`);
+
+    log.info(`Destination selected: ${dest.label} (${dest.path})`);
+
+    const filePath = path.resolve(dest.path, pending.fileName);
+    await downloadFile(ctx, pending.url, filePath);
+  } catch (err) {
+    log.error(`Error in callback_query handler:`, err.message);
+    try {
+      await ctx.answerCbQuery('An error occurred.');
+    } catch (e) {
+      log.error(`Failed to answer callback:`, e.message);
+    }
+  }
+});
+
 // Listen for text messages
 bot.on(message('text'), async (ctx) => {
-  // log.info('Received a text message', ctx.message);
-
   // Check if the message is from the authorized user
   if (ctx.message.from.id !== config.id) {
     log.error(`Unauthorized user ${ctx.message.from.id} tried to send a message`);
@@ -193,19 +301,20 @@ bot.on(message('text'), async (ctx) => {
   if (!type) return;
 
   const text = ctx.message.text;
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  if (urlRegex.test(text)) {
-    // Download the file from the URL
-    const fileName = text.split('/').pop();
-    const filePath = getFilePath(fileName, type);
-
-    downloadFile(ctx, text, filePath)
+  const match = text.match(/(https?:\/\/[^\s]+)/);
+  if (match) {
+    const url = match[1];
+    const fileName = url.split('/').pop();
+    await handleFileMessage(ctx, url, fileName, type);
   }
 });
 
 // Listen for audio | document | photo | video messages
 bot.on(message, async (ctx) => {
-  // log.info('Received a message', ctx.message);
+  // Ignore Telegram service messages (e.g., "auto-delete enabled" notifications)
+  if (!isMessageDownloadable(ctx.message)) {
+    return;
+  }
 
   // Check if the message is from the authorized user
   if (ctx.message.from.id !== config.id) {
@@ -219,14 +328,76 @@ bot.on(message, async (ctx) => {
   const fileId = getFileId(ctx.message);
   const fileUrl = await ctx.telegram.getFileLink(fileId);
   const fileName = getFileName(ctx.message);
-  const filePath = getFilePath(fileName, type);
 
-  downloadFile(ctx, fileUrl.href, filePath);
+  await handleFileMessage(ctx, fileUrl.href, fileName, type);
 });
 
+// Handle inline keyboard button presses (destination selection)
+bot.on('callback_query', async (ctx) => {
+  try {
+    log.info(`Callback query received: ${ctx.callbackQuery.data}`);
+
+    const data = ctx.callbackQuery.data;
+
+    // Only handle destination callbacks
+    if (!data || !data.startsWith('dest:')) {
+      log.info(`Ignoring non-destination callback: ${data}`);
+      return;
+    }
+
+    // Parse callback data: "dest:chatId:messageId:destinationIndex"
+    const parts = data.split(':');
+    if (parts.length !== 4) {
+      log.error(`Invalid callback format: ${data}`);
+      await ctx.answerCbQuery('Invalid request format.');
+      return;
+    }
+
+    const key = `${parts[1]}:${parts[2]}`;
+    const index = parseInt(parts[3], 10);
+
+    log.info(`Parsed callback: key=${key}, index=${index}`);
+
+    const pending = pendingDownloads.get(key);
+
+    if (!pending) {
+      log.warning(`Pending download not found for key: ${key}`);
+      await ctx.answerCbQuery('This download request has expired.');
+      return;
+    }
+
+    log.info(`Found pending download, destinations: ${pending.destinations.map(d => d.label).join(', ')}`);
+
+    const dest = pending.destinations[index];
+
+    if (!dest) {
+      log.error(`Invalid destination index: ${index}`);
+      await ctx.answerCbQuery('Invalid destination.');
+      return;
+    }
+
+    // Remove from pending and proceed with download
+    pendingDownloads.delete(key);
+    await ctx.answerCbQuery(`Saving to ${dest.label}...`);
+
+    log.info(`Destination selected: ${dest.label} (${dest.path})`);
+
+    const filePath = path.resolve(dest.path, pending.fileName);
+    await downloadFile(ctx, pending.url, filePath);
+  } catch (err) {
+    log.error(`Error handling callback_query:`, err);
+    try {
+      await ctx.answerCbQuery('An error occurred.');
+    } catch (e) {
+      // ignore
+    }
+  }
+});
 
 // Start the bot
 bot.launch();
+
+log.success('file-bot started and waiting for messages');
 
 // Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'))

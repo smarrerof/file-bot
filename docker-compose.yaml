@@ -7,10 +7,13 @@ services:
       context: .
       dockerfile: ./Dockerfile.dev
     volumes:
-      - <tu ruta para descargas>:/downloads
-      # - <tu ruta para descargas de tipo audio>:/audios
-      # - <tu ruta para descargas de tipo documento>:/documents
-      # - <tu ruta para descargas de tipo fotos>:/photos
-      # - <tu ruta para descargas de tipo torrent>:/torrents
-      # - <tu ruta para descargas de tipo video>:/videos
+      - ./config:/config
+      - ./downloads:/downloads
+      # Mount additional destinations defined in config/routing.yaml:
+      # - <documents-path>:/documents
+      # - <paperless-path>:/paperless/consume
+      # - <qbit-path>:/qbit/watch
+      # - <music-path>:/music
+      # - <photos-path>:/photos
+      # - <videos-path>:/videos
     tty: true

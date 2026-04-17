@@ -1,0 +1,45 @@
+# File routing configuration for file-bot
+# Copy this file to 'config/routing.yaml' and customize destinations and extensions.
+# If the file does not exist, default values from the code are used.
+
+# Destinations per file type.
+# Each type can have one or multiple destinations.
+# If more than one is configured, the bot will ask the user which one to use.
+destinations:
+  document:
+    - label: Documents
+      path: /documents
+    # - label: Paperless
+    #   path: /paperless/consume
+
+  torrent:
+    - label: Torrents
+      path: /torrents
+    # - label: qBittorrent
+    #   path: /qbit/watch
+    # - label: Transmission
+    #   path: /transmission/watch
+
+  audio:
+    - label: Music
+      path: /music
+
+  photo:
+    - label: Photos
+      path: /photos
+
+  video:
+    - label: Videos
+      path: /videos
+    # - label: Movies
+    #   path: /movies
+    # - label: Series
+    #   path: /series
+
+# Extensions per type (optional — defaults are used if not specified)
+# extensions:
+#   audio:    [.aac, .flac, .m4a, .mp3, .ogg, .opus, .wav, .wma]
+#   document: [.doc, .docx, .pdf, .ppt, .pptx, .txt, .xls, .xlsx]
+#   photo:    [.bmp, .gif, .jpeg, .jpg, .png, .svg, .tiff, .webp]
+#   torrent:  [.torrent]
+#   video:    [.avi, .flv, .mkv, .mov, .mp4, .mpeg, .mpg, .wmv]

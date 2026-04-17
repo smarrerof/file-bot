@@ -1,11 +1,14 @@
-FROM node:alpine3.21
+FROM node:lts-alpine
+
+# Upgrade system packages to get security patches
+RUN apk upgrade --no-cache
 
 WORKDIR /app
 
 COPY *.js ./
 COPY package.json ./
 
-RUN npm install
+RUN npm install && npm audit fix
 
 VOLUME /downloads
 

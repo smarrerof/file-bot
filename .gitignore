@@ -4,8 +4,14 @@ node_modules/
 # Environment variables
 .env
 
+# Configuration (ignore actual configs, keep examples)
+config/*.yaml
+!config/*.example.yaml
+
 # Other files
 .DS_Store
 
 # Other folders
+.claude/
+downloads/
 samples/
