@@ -31,10 +31,12 @@ Ahora puedes enrutar cada tipo de archivo a **múltiples destinos**. Si configur
 destinations:
   document:
     - label: Documents
-      path: /documents
+      path: /documents        # ruta dentro del contenedor (debe estar montada como volumen)
     - label: Paperless
-      path: /paperless/consume
+      path: /paperless/consume  # ruta dentro del contenedor (debe estar montada como volumen)
 ```
+
+> **Importante:** los `path` son rutas **dentro del contenedor**. Cada path debe tener su correspondiente entrada en `volumes` del docker-compose apuntando a la carpeta real en el host.
 
 Cuando subes un PDF, el bot te pregunta dónde guardarlo:
 ```
@@ -156,8 +158,12 @@ services:
       - TELEGRAM_BOT_TOKEN=
       - TELEGRAM_CHAT_ID=
     volumes:
-      - ./config:/config
-      - ./downloads:/downloads
+      - ./config:/config          # carpeta con routing.yaml (obligatorio para usar rutas personalizadas)
+      - /host/downloads:/downloads  # destino por defecto
+      # Añade un volumen por cada path definido en routing.yaml:
+      # - /host/documents:/documents
+      # - /host/paperless/consume:/paperless/consume
+      # - /host/torrents:/torrents
     restart: unless-stopped
     tty: true
 ```

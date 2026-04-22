@@ -45,15 +45,21 @@ function loadRouting() {
 
   const routingPath = `${configDir}/routing.yaml`;
 
+  console.log(`[config] Reading routing config from ${routingPath}`);
+
   if (!fs.existsSync(routingPath)) {
+    console.log(`[config] ${routingPath} not found, using defaults (all files -> /downloads)`);
     return {};
   }
 
   try {
     const content = fs.readFileSync(routingPath, 'utf8');
-    return yaml.load(content) ?? {};
+    const result = yaml.load(content) ?? {};
+    console.log(`[config] routing.yaml loaded successfully`);
+    return result;
   } catch (err) {
-    console.error('Error loading routing config:', err.message);
+    console.error(`[config] Error parsing routing.yaml: ${err.message}`);
+    console.error(`[config] Falling back to defaults (all files -> /downloads)`);
     return {};
   }
 }
@@ -67,5 +73,11 @@ const config = {
   destinations: { ...DEFAULT_DESTINATIONS, ...(routing.destinations ?? {}) },
   extensions:   { ...DEFAULT_EXTENSIONS,   ...(routing.extensions   ?? {}) },
 };
+
+console.log('[config] Configured destinations:');
+for (const [type, dests] of Object.entries(config.destinations)) {
+  const labels = dests.map(d => `${d.label} (${d.path})`).join(', ');
+  console.log(`[config]   ${type}: ${labels}`);
+}
 
 export default config;
