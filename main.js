@@ -239,56 +239,6 @@ async function handleFileMessage(ctx, url, fileName, type) {
   }
 }
 
-// Handle inline keyboard button presses (destination selection)
-bot.on('callback_query', async (ctx) => {
-  try {
-    const data = ctx.callbackQuery?.data;
-
-    if (!data || !data.startsWith('dest:')) {
-      return await ctx.answerCbQuery();
-    }
-
-    // Parse callback data: "dest:chatId:messageId:destinationIndex"
-    const parts = data.split(':');
-    if (parts.length !== 4) {
-      log.error(`Invalid callback format: ${data}`);
-      return await ctx.answerCbQuery('Invalid request format.');
-    }
-
-    const key = `${parts[1]}:${parts[2]}`;
-    const index = parseInt(parts[3], 10);
-
-    const pending = pendingDownloads.get(key);
-
-    if (!pending) {
-      return await ctx.answerCbQuery('This download request has expired.');
-    }
-
-    const dest = pending.destinations[index];
-
-    if (!dest) {
-      log.error(`Invalid destination index: ${index}`);
-      return await ctx.answerCbQuery('Invalid destination.');
-    }
-
-    // Remove from pending and proceed with download
-    pendingDownloads.delete(key);
-    await ctx.answerCbQuery(`Saving to ${dest.label}...`);
-
-    log.info(`Destination selected: ${dest.label} (${dest.path})`);
-
-    const filePath = path.resolve(dest.path, pending.fileName);
-    await downloadFile(ctx, pending.url, filePath);
-  } catch (err) {
-    log.error(`Error in callback_query handler:`, err.message);
-    try {
-      await ctx.answerCbQuery('An error occurred.');
-    } catch (e) {
-      log.error(`Failed to answer callback:`, e.message);
-    }
-  }
-});
-
 // Listen for text messages
 bot.on(message('text'), async (ctx) => {
   // Check if the message is from the authorized user
@@ -310,7 +260,7 @@ bot.on(message('text'), async (ctx) => {
 });
 
 // Listen for audio | document | photo | video messages
-bot.on(message, async (ctx) => {
+bot.on('message', async (ctx) => {
   // Ignore Telegram service messages (e.g., "auto-delete enabled" notifications)
   if (!isMessageDownloadable(ctx.message)) {
     return;
@@ -333,69 +283,50 @@ bot.on(message, async (ctx) => {
 });
 
 // Handle inline keyboard button presses (destination selection)
-bot.on('callback_query', async (ctx) => {
+bot.action(/^dest:/, async (ctx) => {
   try {
-    log.info(`Callback query received: ${ctx.callbackQuery.data}`);
+    await ctx.answerCbQuery();
 
     const data = ctx.callbackQuery.data;
-
-    // Only handle destination callbacks
-    if (!data || !data.startsWith('dest:')) {
-      log.info(`Ignoring non-destination callback: ${data}`);
-      return;
-    }
+    log.info(`Destination callback: ${data}`);
 
     // Parse callback data: "dest:chatId:messageId:destinationIndex"
     const parts = data.split(':');
     if (parts.length !== 4) {
       log.error(`Invalid callback format: ${data}`);
-      await ctx.answerCbQuery('Invalid request format.');
       return;
     }
 
     const key = `${parts[1]}:${parts[2]}`;
     const index = parseInt(parts[3], 10);
 
-    log.info(`Parsed callback: key=${key}, index=${index}`);
-
     const pending = pendingDownloads.get(key);
 
     if (!pending) {
       log.warning(`Pending download not found for key: ${key}`);
-      await ctx.answerCbQuery('This download request has expired.');
+      await ctx.reply('🔴 This download request has expired.');
       return;
     }
-
-    log.info(`Found pending download, destinations: ${pending.destinations.map(d => d.label).join(', ')}`);
 
     const dest = pending.destinations[index];
 
     if (!dest) {
       log.error(`Invalid destination index: ${index}`);
-      await ctx.answerCbQuery('Invalid destination.');
       return;
     }
 
-    // Remove from pending and proceed with download
     pendingDownloads.delete(key);
-    await ctx.answerCbQuery(`Saving to ${dest.label}...`);
-
-    log.info(`Destination selected: ${dest.label} (${dest.path})`);
+    log.info(`Saving ${pending.fileName} to ${dest.label} (${dest.path})`);
 
     const filePath = path.resolve(dest.path, pending.fileName);
     await downloadFile(ctx, pending.url, filePath);
   } catch (err) {
-    log.error(`Error handling callback_query:`, err);
-    try {
-      await ctx.answerCbQuery('An error occurred.');
-    } catch (e) {
-      // ignore
-    }
+    log.error(`Error handling destination callback:`, err);
   }
 });
 
-// Start the bot
-bot.launch();
+// Start the bot (allowedUpdates ensures Telegram sends callback_query events)
+bot.launch({ allowedUpdates: ['message', 'callback_query'] });
 
 log.success('file-bot started and waiting for messages');
 
