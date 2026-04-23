@@ -10,6 +10,7 @@ config/*.yaml
 
 # Other files
 .DS_Store
+CLAUDE.md
 
 # Other folders
 .claude/
